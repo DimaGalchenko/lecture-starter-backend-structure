@@ -1,11 +1,13 @@
-var express = require("express");
-var knex = require("knex");
+const express = require("express");
+const attachDB = require("./app/middlewares/db.middleware");
+const userRoutes = require('./app/routes/user.routes');
+
 var jwt = require("jsonwebtoken");
 var joi = require('joi');
 var ee = require('events');
 
-var dbConfig = require("./knexfile");
-var app = express();
+
+const app = express();
 
 var port = 4066;
 
@@ -16,126 +18,13 @@ var stats = {
   totalEvents: 1,
 };
 
-var db;
 app.use(express.json());
-app.use((uselessRequest, uselessResponse, neededNext) => {
-  db = knex(dbConfig.development);
-  db.raw('select 1+1 as result').then(function () {
-    neededNext();
-  }).catch(() => {
-    throw new Error('No db connection');
-  });
-});
+app.use(attachDB);
+
+app.use("/users", userRoutes);
 
 app.get("/health", (req, res) => {
   res.send("Hello World!");
-});
-
-app.get("/users/:id", (req, res) => {
-  try {
-    var schema = joi.object({
-      id: joi.string().uuid(),
-    }).required();
-    var isValidResult = schema.validate(req.params);
-    if(isValidResult.error) {
-      res.status(400).send({ error: isValidResult.error.details[0].message });
-      return;
-    };
-    db("user").where('id', req.params.id).returning("*").then(([result]) => {
-      if(!result) {
-        res.status(404).send({ error: 'User not found'});
-        return;
-      }
-      return res.send({ 
-        ...result,
-      });
-    });
-  } catch (err) {
-    console.log(err);
-    res.status(500).send("Internal Server Error");
-    return;
-  }
-});
-
-app.post("/users", (req, res) => {
-  var schema = joi.object({
-    id: joi.string().uuid(),
-    type: joi.string().required(),
-    email: joi.string().email().required(),
-    phone: joi.string().pattern(/^\+?3?8?(0\d{9})$/).required(),
-    name: joi.string().required(),
-    city: joi.string(),
-  }).required();
-  var isValidResult = schema.validate(req.body);
-  if(isValidResult.error) {
-    res.status(400).send({ error: isValidResult.error.details[0].message });
-    return;
-  };
-  req.body.balance = 0;
-  db("user").insert(req.body).returning("*").then(([result]) => {
-    result.createdAt = result.created_at;
-    delete result.created_at;
-    result.updatedAt = result.updated_at;
-    delete result.updated_at;
-    statEmitter.emit('newUser');
-    return res.send({ 
-      ...result,
-      accessToken: jwt.sign({ id: result.id, type: result.type }, process.env.JWT_SECRET)
-    });
-  }).catch(err => {
-    if(err.code == '23505') {
-      res.status(400).send({
-        error: err.detail
-      });
-      return;
-    }
-    res.status(500).send("Internal Server Error");
-    return;
-  });
-});
-
-app.put("/users/:id", (req, res) => {
-  let token = req.headers[`authorization`];
-  let tokenPayload;
-  if(!token) {
-    return res.status(401).send({ error: 'Not Authorized' });
-  }
-  token = token.replace('Bearer ', '');
-  try {
-    tokenPayload = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) {
-    return res.status(401).send({ error: 'Not Authorized' });
-  }
-  var schema = joi.object({
-    email: joi.string().email(),
-    phone: joi.string().pattern(/^\+?3?8?(0\d{9})$/),
-    name: joi.string(),
-    city: joi.string(),
-  }).required();
-  var isValidResult = schema.validate(req.body);
-  if(isValidResult.error) {
-    res.status(400).send({ error: isValidResult.error.details[0].message });
-    return;
-  };
-  if(req.params.id !== tokenPayload.id) {
-    return res.status(401).send({ error: 'UserId mismatch' });
-  }
-  db("user").where('id', req.params.id).update(req.body).returning("*").then(([result]) => {
-    return res.send({ 
-      ...result,
-    });
-  }).catch(err => {
-    if(err.code == '23505') {
-      console.log(err);
-      res.status(400).send({
-        error: err.detail
-      });
-      return;
-    }
-    console.log(err);
-    res.status(500).send("Internal Server Error");
-    return;
-  });
 });
 
 app.post("/transactions", (req, res) => {
@@ -149,7 +38,7 @@ app.post("/transactions", (req, res) => {
   if(isValidResult.error) {
     res.status(400).send({ error: isValidResult.error.details[0].message });
     return;
-  };
+  }
 
   let token = req.headers["authorization"];
   if(!token) {
@@ -194,7 +83,7 @@ app.post("/transactions", (req, res) => {
     });
   }).catch(err => {
     res.status(500).send("Internal Server Error");
-    return;
+
   });
 });
 
@@ -215,7 +104,7 @@ app.post("/events", (req, res) => {
   if(isValidResult.error) {
     res.status(400).send({ error: isValidResult.error.details[0].message });
     return;
-  };
+  }
   
   try {
     var authKey = "authorization";
@@ -278,7 +167,7 @@ app.post("/events", (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).send("Internal Server Error");
-    return;
+
   }
 });
 
@@ -293,7 +182,7 @@ app.post("/bets", (req, res) => {
   if(isValidResult.error) {
     res.status(400).send({ error: isValidResult.error.details[0].message });
     return;
-  };
+  }
   
   let userId;
   try {
@@ -377,7 +266,7 @@ app.post("/bets", (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).send("Internal Server Error");
-    return;
+
   }
 });
 
@@ -389,7 +278,7 @@ app.put("/events/:id", (req, res) => {
   if(isValidResult.error) {
     res.status(400).send({ error: isValidResult.error.details[0].message });
     return;
-  };
+  }
   
   try {
     var authorization = `authorization`;
@@ -455,7 +344,7 @@ app.put("/events/:id", (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).send("Internal Server Error");
-    return;
+
   }
 });
 
@@ -479,7 +368,7 @@ app.get("/stats", (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).send("Internal Server Error");
-    return;
+
   }
 });
 
