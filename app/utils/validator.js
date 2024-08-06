@@ -17,7 +17,25 @@ const schemas = {
         phone: joi.string().pattern(/^\+?3?8?(0\d{9})$/),
         name: joi.string(),
         city: joi.string(),
-    }).required()
+    }).required(),
+    betSchema: joi.object({
+        id: joi.string().uuid(),
+        eventId: joi.string().uuid().required(),
+        betAmount: joi.number().min(1).required(),
+        prediction: joi.string().valid('w1', 'w2', 'x').required(),
+    }).required(),
+    eventSchema: joi.object({
+        id: joi.string().uuid(),
+        type: joi.string().required(),
+        homeTeam: joi.string().required(),
+        awayTeam: joi.string().required(),
+        startAt: joi.date().required(),
+        odds: joi.object({
+            homeWin: joi.number().min(1.01).required(),
+            awayWin: joi.number().min(1.01).required(),
+            draw: joi.number().min(1.01).required(),
+        }).required(),
+    }).required(),
 }
 
 const validateSchema = (schema, data) => {

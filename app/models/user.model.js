@@ -35,4 +35,9 @@ const updateUser = async (db, userId, userDetails) => {
     });
 }
 
-module.exports = {createUser, updateUser, getUserById};
+const updateUserBalance = async (db, userId, newBalance) => {
+    await db("user").where('id', userId).update({ balance: newBalance });
+}
+
+
+module.exports = {createUser, updateUser, getUserById, updateUserBalance};
